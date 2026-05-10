@@ -1,0 +1,39 @@
+# ============================================================================
+# Vulnet Configuration File
+# ============================================================================
+# Las rutas de wordlists se cargan automáticamente según el SO detectado.
+# Edita solo el bloque correspondiente a tu sistema operativo.
+
+general:
+  output_dir: "./reports"
+  timeout: 600
+  parallel_threads: 3
+  default_mode: "normal"
+
+# ─────────────────────────────────────────────
+# WINDOWS
+# ─────────────────────────────────────────────
+# Edita estas rutas con las de tus wordlists.
+# Si una ruta no existe, Vulnet te pedirá la ruta manualmente.
+windows:
+  wordlists:
+    directory: "C:\\tools\\wordlists\\directory-list-2.3-medium.txt"
+    passwords: "C:\\tools\\wordlists\\rockyou.txt"
+    subdomains: "C:\\tools\\wordlists\\subdominios.txt"
+    custom:
+      - path: "C:\\tools\\wordlists\\api_paths.txt"
+        alias: "api-rutas"
+      - path: "C:\\tools\\wordlists\\params.txt"
+        alias: "parametros"
+
+# ─────────────────────────────────────────────
+# LINUX (Kali / Ubuntu / Debian / etc.)
+# ─────────────────────────────────────────────
+linux:
+  wordlists:
+    directory: "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
+    passwords: "/usr/share/wordlists/rockyou.txt"
+    subdomains: "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
+    custom:
+      - path: "/usr/share/wordlists/custom/api_paths.txt"
+        alias: "api-rutas"
