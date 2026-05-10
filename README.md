@@ -1,4 +1,14 @@
-# Vulnet — Security Scanner CLI
+<p align="left">
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo/fenreitsu-white.png">
+    <source media="(prefers-color-scheme: light)" srcset="logo/fenreitsu.png">
+    <img src="fenreitsu-white.png" width="64" height="64" align="left" style="margin-right: 10px; margin-top: 12.4px">
+  </picture>
+  <br>Vulnet — Security Scanner CLI
+  </h1>
+  <br clear="all">
+</p>
 
 Escáner de seguridad modular para terminal. Ejecuta **21 herramientas** de auditoría contra un objetivo (IP/dominio/URL) y exporta resultados a CSV y JSON.
 
@@ -76,6 +86,7 @@ Al arrancar, Vulnet analiza qué herramientas tienes instaladas y cuáles son co
 |---|-------------|-------------|------------------------|
 | 21 | **THC-SSL-DOS** | ⚠️ DoS contra SSL. No recomendado sin autorización expresa | [github.com/nicolasff/thc-ssl-dos](https://github.com/nicolasff/thc-ssl-dos) |
 
+> [!CAUTION]
 > **THC-SSL-DOS** es una herramienta de denegación de servicio. No la actives a menos que tengas permiso escrito del objetivo. Vulnet la trae deshabilitada y requiere confirmación explícita ("ACEPTO") para ejecutarse.
 
 ---
@@ -200,12 +211,8 @@ Estructurado con metadatos (target, fecha, modo, OS, estadísticas), ideal para 
 
 ## Aviso para Windows
 
-Vulnet detecta automáticamente tu sistema operativo. En Windows 11:
-
-- **11 herramientas** funcionan de forma nativa
-- **10 herramientas** no están disponibles (solo Linux)
-- Las herramientas no disponibles se ocultan del menú automáticamente
-- Para experiencia completa: usa **WSL** o Linux nativo
+> [!WARNING]
+> En Windows solo **11 de 21 herramientas** están disponibles. Las herramientas Linux-only se ocultan automáticamente del menú. Para experiencia completa, usa **WSL** o Linux nativo.
 
 ---
 
