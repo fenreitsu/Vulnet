@@ -1,14 +1,12 @@
 <p align="left">
-<h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="logo/fenreitsu-white.png">
     <source media="(prefers-color-scheme: light)" srcset="logo/fenreitsu.png">
-    <img src="fenreitsu-white.png" width="64" height="64" align="left" style="margin-right: 10px; margin-top: 12.4px">
+    <img src="fenreitsu-white.png" width="64" height="64" ">
   </picture>
-  <br>Vulnet — Security Scanner CLI
-  </h1>
-  <br clear="all">
 </p>
+
+# Vulnet — Security Scanner CLI
 
 Escáner de seguridad modular para terminal. Ejecuta **21 herramientas** de auditoría contra un objetivo (IP/dominio/URL) y exporta resultados a CSV y JSON.
 
