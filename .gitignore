@@ -22,8 +22,40 @@ env/
 Thumbs.db
 .DS_Store
 
+# Internal tracking (not for public)
+to_do.md
+
 # Vulnet exports
 reports/
+*.pcap
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets
+.env
+.env.*
+*.key
+*.pem
+*.crt
+
+# Node (wappalyzer)
+node_modules/
+
+# Testing / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Backups
+*.bak
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
 
 # Config local (optional, if user wants to track their own)
 # config_local.yaml

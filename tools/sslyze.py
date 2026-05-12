@@ -12,7 +12,7 @@ class SSLyzeTool(BaseTool):
         return ["Windows", "Linux"]
 
     def build_command(self) -> list[str]:
-        return ["sslyze", "--regular", self.config.target_domain]
+        return ["sslyze", self.config.target_domain]
 
     def parse_results(self, stdout: str) -> list[Finding]:
         findings = []

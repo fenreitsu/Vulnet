@@ -18,6 +18,7 @@ from rich.progress import (
     TextColumn,
     BarColumn,
     TaskProgressColumn,
+    TimeElapsedColumn,
 )
 from rich.text import Text
 from rich import box
@@ -45,12 +46,28 @@ def print_banner():
 ██║   ██║██║   ██║██║     ██╔██╗ ██║█████╗     ██║
 ╚██╗ ██╔╝██║   ██║██║     ██║╚██╗██║██╔══╝     ██║
  ╚████╔╝ ╚██████╔╝███████╗██║ ╚████║███████╗   ██║
-  ╚═══╝   ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝   ╚═╝     - by @Fenreitsu
+   ╚═══╝   ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝   ╚═╝     - by @Fenreitsu
     """
     console.print(Panel(Text(banner, style="bold cyan"), box=box.ROUNDED))
     console.print(
         f"   Security Vulnerability Test CLI  v1.0  |  {datetime.now():%Y-%m-%d %H:%M}\n",
         style="italic grey62",
+    )
+
+
+def print_root_warning():
+    console.print(
+        Panel(
+            Text(
+                "⚠️  Vulnet necesita permisos root para algunas herramientas\n"
+                "(masscan, tshark, hydra, etc.).\n\n"
+                "Ejecuta con:  sudo ./vulnet.py",
+                style="bold yellow",
+            ),
+            title="Permisos",
+            border_style="yellow",
+            box=box.ROUNDED,
+        )
     )
 
 
@@ -168,6 +185,7 @@ def create_progress():
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TaskProgressColumn(),
+        TimeElapsedColumn(),
         console=console,
     )
 
@@ -181,8 +199,12 @@ def print_step(step: int, total: int, message: str):
 
 
 def ask_yes_no(prompt: str) -> bool:
-    result = console.input(f"\n[bold]{prompt}[/] [cyan](s/n)[/]: ").strip().lower()
-    return result == "s" or result == "si" or result == "sí"
+    print(f"\n{prompt} (s/n): ", end="", flush=True)
+    try:
+        raw = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return raw in ("s", "si", "sí")
 
 
 def ask_choice(prompt: str, options: list[str], default: int = 0) -> int:

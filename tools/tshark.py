@@ -1,3 +1,6 @@
+from datetime import datetime
+from pathlib import Path
+
 from core.basetool import BaseTool
 from core.models import Finding, Severity
 
@@ -12,7 +15,12 @@ class TsharkTool(BaseTool):
         return ["Windows", "Linux"]
 
     def build_command(self) -> list[str]:
-        self.pcap_file = self.create_temp_file(".pcap")
+        pcap_dir = Path(self.config.output_dir) / "tshark_captures"
+        pcap_dir.mkdir(parents=True, exist_ok=True)
+        safe_target = self.config.target_domain.replace(".", "_")
+        self.pcap_file = str(
+            pcap_dir / f"{safe_target}_{datetime.now():%Y%m%d_%H%M%S}.pcap"
+        )
         return [
             "tshark", "-i", "any",
             "-f", f"host {self.config.target_ip}",
@@ -23,13 +31,13 @@ class TsharkTool(BaseTool):
     def parse_results(self, stdout: str) -> list[Finding]:
         findings = []
         for line in stdout.splitlines():
-            if "packet" in line.lower() and ("captured" in line.lower()):
+            if "packet" in line.lower() and "captured" in line.lower():
                 findings.append(
                     Finding(
                         title="Captura de tráfico completada",
                         severity=Severity.INFO,
                         description=line.strip()[:200],
-                        remediation="Analizar el archivo PCAP con Wireshark.",
+                        remediation=f"Analizar el PCAP en: {self.pcap_file}",
                         tool=self.name,
                     )
                 )
@@ -38,9 +46,12 @@ class TsharkTool(BaseTool):
                 Finding(
                     title="Captura de red (20s)",
                     severity=Severity.INFO,
-                    description=f"Tráfico capturado hacia {self.config.target_ip}. Archivo: {getattr(self, 'pcap_file', 'N/A')}",
-                    remediation="Abrir el PCAP en Wireshark para análisis detallado.",
+                    description=f"Tráfico capturado hacia {self.config.target_ip}. Archivo: {self.pcap_file}",
+                    remediation=f"Abrir el PCAP en Wireshark: {self.pcap_file}",
                     tool=self.name,
                 )
             )
         return findings
+
+    def cleanup(self):
+        pass

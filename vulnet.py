@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import ipaddress
 import os
 import platform
 import socket
 import sys
 import threading
+import time
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -14,6 +16,7 @@ from core.console import (
     console,
     print_banner,
     print_os_warning,
+    print_root_warning,
     print_health_check,
     print_mode_info,
     print_findings_table,
@@ -29,6 +32,8 @@ from core.exporter import export_all
 from core.models import ScanConfig, Mode
 from tools import TOOL_REGISTRY, get_tools_for_os, get_active_tools
 from tools.thc_ssl_dos import THCSSLDOSTool
+
+MODE_TIMEOUTS = {Mode.SIMPLE: 120, Mode.NORMAL: 300, Mode.COMPLEX: 600, Mode.CUSTOM: 600}
 
 
 def load_config(path: str = "config.yaml") -> dict:
@@ -69,15 +74,26 @@ def resolve_wordlist(config: dict, os_name: str, config_mode: str) -> str:
     return wordlist_options[choice - 1][1]
 
 
+def is_valid_ip(raw: str) -> bool:
+    try:
+        ipaddress.ip_address(raw)
+        return True
+    except ValueError:
+        return False
+
+
 def resolve_target(raw: str, scan_type: str) -> tuple[str, str]:
-    if scan_type == "domain":
-        tmp = raw if "://" in raw else "http://" + raw
-        domain = urlparse(tmp).hostname or raw
-        ip = socket.gethostbyname(domain)
-    else:
-        tmp = raw if "://" in raw else "http://" + raw
-        ip = socket.gethostbyname(urlparse(tmp).hostname or raw)
+    tmp = raw if "://" in raw else "http://" + raw
+    host = urlparse(tmp).hostname or raw
+
+    if scan_type == "ip":
+        ip = host
         domain = ip
+    else:
+        domain = host
+        info = socket.getaddrinfo(domain, None)
+        ip = info[0][4][0]
+
     return ip, domain
 
 
@@ -103,9 +119,7 @@ def interactive_menu(config: dict) -> ScanConfig:
 
     raw_target = ask_input("Target (IP / dominio / URL)", default="scanme.nmap.org")
 
-    scan_type = "domain"
-    if raw_target.replace(".", "").isdigit():
-        scan_type = "ip"
+    scan_type = "ip" if is_valid_ip(raw_target) else "domain"
 
     mode_options = ["Simple - Rapido", "Normal - Balanceado", "Complejo - Exhaustivo", "Personalizado"]
     mode_choice = ask_choice("Modo de escaneo", mode_options, default=2)
@@ -169,7 +183,7 @@ def interactive_menu(config: dict) -> ScanConfig:
         console.print(f"[bold red]Error al resolver target: {e}[/]")
         sys.exit(1)
 
-    timeout = config.get("general", {}).get("timeout", 600)
+    timeout = config.get("general", {}).get("timeout", MODE_TIMEOUTS.get(mode, 600))
 
     return ScanConfig(
         target_ip=ip,
@@ -192,8 +206,17 @@ def run_scan(config: ScanConfig) -> list:
     print_separator()
     print_mode_info(config.mode.value, config.target_domain, config.target_ip, total)
 
+    console_lock = threading.Lock()
+
     def log(msg):
-        console.print(msg)
+        with console_lock:
+            console.print(msg)
+
+    def parallel_log(msg):
+        if msg.startswith("   >"):
+            return
+        with console_lock:
+            console.print(msg)
 
     progress = create_progress()
 
@@ -201,26 +224,73 @@ def run_scan(config: ScanConfig) -> list:
         threads = []
         lock = threading.Lock()
         results_per_tool = {}
+        tools_in_flight = []
+        interrupted = False
+        task_start = {}
+        monitor_active = True
 
-        def worker(cls):
-            tool = cls(config)
-            t_name = tool.name
-            task_id = progress.add_task(f"[cyan]{t_name}", total=None)
-            local_log = lambda m: log(m)
-            res = tool.run(local_log)
+        def worker(tool, task_id):
+            res = tool.run(parallel_log)
             with lock:
-                results_per_tool[t_name] = res
-            progress.update(task_id, visible=False)
+                results_per_tool[tool.name] = res
+            with console_lock:
+                try:
+                    progress.update(task_id, visible=False)
+                except Exception:
+                    pass
+
+        def monitor():
+            while monitor_active:
+                now = time.time()
+                for tid, tstart in list(task_start.items()):
+                    elapsed = now - tstart
+                    try:
+                        progress.update(tid, completed=min(elapsed, config.timeout), total=config.timeout, refresh=True)
+                    except Exception:
+                        pass
+                time.sleep(0.5)
 
         with progress:
             for i, cls in enumerate(tool_classes, 1):
-                print_step(i, total, f"Lanzando {cls.__name__.replace('Tool', '')}...")
-                t = threading.Thread(target=worker, args=(cls,), daemon=True)
+                t_name = cls.__name__.replace("Tool", "")
+                print_step(i, total, f"Lanzando {t_name}...")
+                task_id = progress.add_task(f"[cyan]{t_name}", total=config.timeout)
+                task_start[task_id] = time.time()
+                tool = cls(config)
+                tools_in_flight.append(tool)
+                t = threading.Thread(target=worker, args=(tool, task_id), daemon=True)
                 threads.append(t)
                 t.start()
 
+            t_monitor = threading.Thread(target=monitor, daemon=True)
+            t_monitor.start()
+
+            POLL_INTERVAL = 0.5
+            deadline = time.time() + config.timeout
             for t in threads:
-                t.join(timeout=config.timeout)
+                while True:
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        break
+                    try:
+                        t.join(timeout=min(POLL_INTERVAL, remaining))
+                    except KeyboardInterrupt:
+                        interrupted = True
+                        break
+                    if not t.is_alive():
+                        break
+                if interrupted or time.time() >= deadline:
+                    break
+
+            if interrupted or time.time() >= deadline:
+                if interrupted:
+                    console.print("\n[bold red]\u2716 Escaneo interrumpido por el usuario.[/]")
+                else:
+                    console.print(f"\n[bold red]\u23f1 Tiempo de espera agotado ({config.timeout}s). Matando procesos restantes.[/]")
+                for tool in tools_in_flight:
+                    tool.kill()
+
+        monitor_active = False
 
         for cls in tool_classes:
             t_name = cls.__name__.replace("Tool", "")
@@ -241,6 +311,10 @@ def run_scan(config: ScanConfig) -> list:
 
 
 def main():
+    if platform.system() == "Linux" and os.geteuid() != 0:
+        print_root_warning()
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="Vulnet Security Scanner CLI",
         usage="vulnet.py [opciones]",
@@ -262,14 +336,15 @@ def main():
             target_domain=args.target,
             mode=Mode(args.mode) if args.mode else Mode.NORMAL,
             wordlist=args.wordlist or "",
-            timeout=config_data.get("general", {}).get("timeout", 600),
+            timeout=config_data.get("general", {}).get("timeout", MODE_TIMEOUTS.get(Mode(args.mode) if args.mode else Mode.NORMAL, 300)),
             selected_tools=args.tools.split(",") if args.tools else [],
             output_formats=[] if args.no_export else ["csv", "json"],
             parallel=args.fast,
             output_dir=args.output,
         )
         try:
-            ip, domain = resolve_target(config.target_domain, "domain")
+            cli_scan_type = "ip" if is_valid_ip(args.target) else "domain"
+            ip, domain = resolve_target(config.target_domain, cli_scan_type)
             config.target_ip = ip
             config.target_domain = domain
         except Exception as e:
@@ -291,7 +366,15 @@ def main():
         console.print("[bold red]No hay herramientas para ejecutar.[/]")
         sys.exit(1)
 
-    findings = run_scan(config)
+    if config.output_dir:
+        os.makedirs(config.output_dir, exist_ok=True)
+
+    findings = []
+
+    try:
+        findings = run_scan(config)
+    except Exception as e:
+        console.print(f"\n[bold red]Error durante el escaneo: {e}[/]")
 
     console.print("\n" + "=" * 60)
     console.print("[bold]RESUMEN FINAL[/]".center(60))
@@ -301,8 +384,8 @@ def main():
     print_stats(findings)
 
     if config.output_formats and findings:
-        if ask_yes_no("Exportar resultados a archivo?"):
-            tools_used = list({f.tool for f in findings})
+        tools_used = list({f.tool for f in findings})
+        try:
             created = export_all(
                 findings=findings,
                 target=config.target_domain,
@@ -312,7 +395,13 @@ def main():
                 base_dir=config.output_dir,
             )
             for fmt, path in created.items():
-                console.print(f"  [green]{fmt.upper()}[/] -> {path}")
+                if fmt == "raw_tools":
+                    count = len(config.raw_outputs)
+                    console.print(f"  [green]RAW LOGS[/] -> {path}  ({count} archivos)")
+                else:
+                    console.print(f"  [green]{fmt.upper()}[/] -> {path}")
+        except Exception as e:
+            console.print(f"[bold red]Error al exportar: {e}[/]")
 
     console.print("\n[bold green]Escaneo completado.[/]")
     console.print(f"[grey62]{datetime.now():%Y-%m-%d %H:%M:%S}[/]")

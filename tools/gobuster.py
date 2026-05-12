@@ -11,6 +11,9 @@ class GobusterTool(BaseTool):
     def supported_os(cls) -> list[str]:
         return ["Windows", "Linux"]
 
+    def get_skip_reason(self) -> str:
+        return "Se necesita una wordlist configurada para usar esta herramienta"
+
     def build_command(self) -> list[str]:
         if not self.config.wordlist:
             return []

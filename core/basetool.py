@@ -1,8 +1,11 @@
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
+
+ANSI_RE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
 from core.models import ScanConfig, Finding, Severity
 
@@ -12,6 +15,16 @@ class BaseTool(ABC):
         self.config = config
         self._name = self.__class__.__name__.replace("Tool", "")
         self.temp_files = []
+        self._process = None
+
+    def kill(self):
+        if self._process and self._process.poll() is None:
+            self._process.kill()
+            self._process.wait()
+            try:
+                self._process.stdout.close()
+            except Exception:
+                pass
 
     @property
     def name(self) -> str:
@@ -30,6 +43,9 @@ class BaseTool(ABC):
     @abstractmethod
     def supported_os(cls) -> list[str]:
         ...
+
+    def get_skip_reason(self) -> str:
+        return "comando vacío"
 
     @abstractmethod
     def build_command(self) -> list[str]:
@@ -78,7 +94,7 @@ class BaseTool(ABC):
 
         cmd = self.build_command()
         if not cmd:
-            log_callback(f"[!] {self.name}: comando vacío. Saltando.")
+            log_callback(f"[!] {self.name}: {self.get_skip_reason()}. Saltando.")
             return []
 
         log_callback(f"[*] Ejecutando: {' '.join(cmd)}")
@@ -87,7 +103,7 @@ class BaseTool(ABC):
         full_output = []
 
         try:
-            process = subprocess.Popen(
+            self._process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -96,14 +112,29 @@ class BaseTool(ABC):
                 universal_newlines=True,
             )
 
-            for line in process.stdout:
-                clean = line.strip()
-                if clean:
-                    log_callback(f"   > {clean}")
-                    full_output.append(line)
+            if self.config.parallel:
+                try:
+                    stdout_data, _ = self._process.communicate(timeout=self.config.timeout)
+                except subprocess.TimeoutExpired:
+                    self._process.kill()
+                    stdout_data, _ = self._process.communicate()
+                full_output.append(ANSI_RE.sub('', stdout_data or ""))
+            else:
+                for line in self._process.stdout:
+                    clean = ANSI_RE.sub('', line.strip())
+                    if clean:
+                        log_callback(f"   > {clean}")
+                        full_output.append(ANSI_RE.sub('', line))
+                self._process.wait()
 
-            process.wait()
+            MAX_RAW_SIZE = 100 * 1024
             final = "".join(full_output)
+            if len(final) > MAX_RAW_SIZE:
+                final = final[:MAX_RAW_SIZE] + (
+                    f"\n\n[... TRUNCATED: {len(final)} bytes. "
+                    f"Mostrando primeros {MAX_RAW_SIZE}.]"
+                )
+            self.config.raw_outputs[self.name] = final
             results = self.parse_results(final)
 
             if not results:
@@ -131,4 +162,5 @@ class BaseTool(ABC):
                 )
             ]
         finally:
+            self._process = None
             self.cleanup()

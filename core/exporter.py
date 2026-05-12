@@ -7,12 +7,16 @@ from pathlib import Path
 from core.models import Finding, ScanConfig, Severity
 
 
-def _generate_report_path(target: str, base_dir: str = "./reports") -> Path:
-    safe_target = target.replace("://", "_").replace("/", "_").replace(":", "_")
+def _safe_filename(target: str) -> str:
+    return target.replace("://", "_").replace("/", "_").replace(":", "_")
+
+
+def _generate_report_path(target: str, base_dir: str = "./reports") -> tuple[Path, str]:
+    safe_target = _safe_filename(target)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     report_dir = Path(base_dir) / f"{safe_target}_{timestamp}"
     report_dir.mkdir(parents=True, exist_ok=True)
-    return report_dir
+    return report_dir, datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def export_csv(
@@ -82,6 +86,15 @@ def export_json(
     return filepath
 
 
+def export_raw_outputs(raw_outputs: dict[str, str], report_dir: Path) -> Path:
+    raw_dir = report_dir / "raw_tools"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for name, output in raw_outputs.items():
+        path = raw_dir / f"{name}.txt"
+        path.write_text(output, encoding="utf-8")
+    return raw_dir
+
+
 def export_all(
     findings: list[Finding],
     target: str,
@@ -90,20 +103,21 @@ def export_all(
     formats: list[str],
     base_dir: str = "./reports",
 ) -> dict[str, Path]:
-    report_dir = _generate_report_path(target, base_dir)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_dir, timestamp = _generate_report_path(target, base_dir)
+    logs_dir = report_dir / "vulnet_logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
     created = {}
 
     if "csv" in formats:
-        path = export_csv(findings, report_dir, target, timestamp)
+        path = export_csv(findings, logs_dir, target, timestamp)
         created["csv"] = path
 
     if "json" in formats:
-        path = export_json(findings, report_dir, target, timestamp, config, tools_used)
+        path = export_json(findings, logs_dir, target, timestamp, config, tools_used)
         created["json"] = path
 
+    if config.raw_outputs:
+        raw_dir = export_raw_outputs(config.raw_outputs, report_dir)
+        created["raw_tools"] = raw_dir
+
     return created
-
-
-def _safe_filename(target: str) -> str:
-    return target.replace("://", "_").replace("/", "_").replace(":", "_")

@@ -18,7 +18,7 @@ class AmassTool(BaseTool):
         findings = []
         lines = [l for l in stdout.splitlines() if l.strip()]
         if lines:
-            subdomains = [l.strip() for l in lines if "." in l][:10]
+            subdomains = [l.strip() for l in lines if "." in l and "%" not in l][:10]
             if subdomains:
                 findings.append(
                     Finding(

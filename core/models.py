@@ -39,3 +39,4 @@ class ScanConfig:
     output_formats: list[str] = field(default_factory=lambda: ["csv", "json"])
     parallel: bool = False
     output_dir: str = "./reports"
+    raw_outputs: dict[str, str] = field(default_factory=dict)

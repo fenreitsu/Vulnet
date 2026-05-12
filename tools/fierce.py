@@ -12,7 +12,7 @@ class FierceTool(BaseTool):
         return ["Linux"]
 
     def build_command(self) -> list[str]:
-        return ["fierce", "-dns", self.config.target_domain]
+        return ["fierce", "--domain", self.config.target_domain]
 
     def parse_results(self, stdout: str) -> list[Finding]:
         findings = []
