@@ -32,7 +32,7 @@ windows:
 linux:
   wordlists:
     directory: "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
-    passwords:  "/usr/share/wordlists/rockyou.txt
+    passwords:  "/usr/share/wordlists/rockyou.txt"
     subdomains: "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
     custom:
       - path: "/usr/share/wordlists/custom/api_paths.txt"
